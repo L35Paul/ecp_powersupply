@@ -15,6 +15,20 @@ class ecp_db(object):
             print(result)
             sys.exit(1)
 
+    def db_fetch_tablenames(self):
+        query = QSqlQuery(self.db)
+        qrytxt = ("SELECT name FROM sqlite_master "
+                  "WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%' "
+                  "UNION ALL "
+                  "SELECT name FROM sqlite_temp_master "
+                  "WHERE type IN ('table','view') ORDER BY 1")
+        query.exec_(qrytxt)
+        print(qrytxt)
+        list = []
+        while query.next():
+            list.append(query.value(0))
+        return list
+
     def db_fetch_table_fields(self, tblname):
         query = QSqlQuery(self.db)
         qrytxt = "pragma table_info({tn})".format(tn=tblname)
@@ -52,19 +66,35 @@ class ecp_db(object):
 
         return data_list
 
-    def db_fetch_tablenames(self):
+    def store_ads1256_channel_config(self, **kwargs):
+        tablename = 'tblAdcChanConfig'
         query = QSqlQuery(self.db)
-        qrytxt = ("SELECT name FROM sqlite_master "
-                  "WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%' "
-                  "UNION ALL "
-                  "SELECT name FROM sqlite_temp_master "
-                  "WHERE type IN ('table','view') ORDER BY 1")
+        qrytxt = "UPDATE {tn} " \
+        "SET NSEL_IN = {v1}, " \
+        "PSEL_IN = {v2}, " \
+        "GAIN = {v3} " \
+        "WHERE PK_CH_ID = {v4}" \
+        .format(tn = tablename, v1=kwargs['nsel'], v2=kwargs['psel'], v3= kwargs['gain'], v4=kwargs['chid'])
+        print('qrytxt')
         query.exec_(qrytxt)
-        print(qrytxt)
-        list = []
+
+    def fetch_ads1256_channel_config(self, chan):
+        tablename = 'tblAdcChanConfig'
+        query = QSqlQuery(self.db)
+        qrytxt = "SELECT * FROM {tn} " \
+        "WHERE PK_CH_ID = {v1}" \
+        .format(tn = tablename, v1 = chan)
+        data_dict = {}
+        data = []
+        query.exec_(qrytxt)
         while query.next():
-            list.append(query.value(0))
-        return list
+            data_dict["PK_ID"] = query.value(0)
+            data_dict["NSEL_IN"] = query.value(1)
+            data_dict["PSEL_IN"] = query.value(2)
+            data_dict["GAIN"] = query.value(3)
+            data.append(data_dict)
+            data_dict = {}
+        return data
 
     def db_fetch_adc1256_command(self, cmd_name):
         tablename = 'tblAdc1256Commands'

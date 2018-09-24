@@ -1,6 +1,6 @@
 import time
 import GPIO_config
-
+import math
 
 class ADS1256(object):
   
@@ -17,9 +17,10 @@ class ADS1256(object):
         self.spi_obj.close()
 
     def read_adc_conversion(self, mux_chan):
-        nsel = 0x08
-        psel = mux_chan
-        self.__adc_write_input_mux(psel, nsel)
+        ch_dict = self.db.fetch_ads1256_channel_config(mux_chan)
+        vals = ch_dict[0]
+        self.__adc_write_input_mux(vals['PSEL_IN'], vals['NSEL_IN'])
+        self.__adc_set_gain(vals['GAIN'])
         params = self.db.db_fetch_adc1256_command('RDATA')
         dictp = params[0]
         byte_list = [dictp['FIRSTBYTE'],self._DUMMY_BYTE,self._DUMMY_BYTE,self._DUMMY_BYTE]
@@ -28,8 +29,17 @@ class ADS1256(object):
         self.pins.adc_disable()
         data_24.pop(0)
         counts = (data_24[2] & 0x0000ff) + (data_24[1] << 8 & 0x00FF00) + (data_24[0] << 16 & 0xff0000)
-        return counts
+        return (int)(counts/vals['GAIN'])
 
+    def __adc_set_gain(self, gain):
+        gainidx = math.log(gain,2)
+        reg_name = 'ad_control'
+        reg_dict = self.db.db_adc1256_fetch_names_n_values(reg_name)
+        reg_dict["pga"] = gainidx
+        self.__adc_write_register(reg_name, **reg_dict)
+        result_dict = self.adc_read_register_to_dict(reg_name)
+        if result_dict != reg_dict:
+            raise ValueError
 
     """
     *	name: ads1256_readchipid
@@ -65,7 +75,6 @@ class ADS1256(object):
         self.RegAddrs = self.db.db_table_data_to_dictionary('tblAdc1256Registers')
         chipid = self.ads1256_readchipid()
         self.__configure_status_reg()
-        self.__adc_write_input_mux(0,1)
         print(chipid)
 
     def __configure_status_reg(self):
@@ -130,13 +139,11 @@ class ADS1256(object):
         self.spi_obj.xfer2(bytelist)
         self.pins.adc_disable()
 
-
     def __search_reg_address_from_name(self, name):
         for a in self.RegAddrs:
             if a['NAME'] == name:
                 return a['ADDRESS']
         return -1
-
 
     def __search_reg_bytes_from_name(self, name):
         for a in self.RegAddrs:
